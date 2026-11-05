@@ -57,6 +57,8 @@ body.drag .wrap{outline:3px dashed var(--teal);outline-offset:-8px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px 14px;min-width:0}
 .s8{grid-column:span 8}.s4{grid-column:span 4}.s6{grid-column:span 6}.s12{grid-column:span 12}
 @media (max-width:900px){.s8,.s4,.s6{grid-column:span 12}}
+.chead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 12px;margin-bottom:10px}
+.chead h2{margin:0}
 .card h2{margin:0 0 10px;font-size:15px;font-weight:800;color:var(--fg);letter-spacing:.3px}
 .chart{position:relative;height:300px}
 .chart.tall{height:340px}
@@ -122,21 +124,21 @@ body.drag .wrap{outline:3px dashed var(--teal);outline-offset:-8px}
       <div class="chart"><canvas id="c-month"></canvas></div>
     </section>
     <section class="card s4">
-      <h2>02  SOCKET MIX</h2>
+      <div class="chead"><h2>02  SOCKET MIX</h2><div class="seg" id="seg-sock" role="group" aria-label="Ukuran"><button type="button" data-v="tx" class="on">Transaksi</button><button type="button" data-v="kwh">kWh</button></div></div>
       <div class="donut">
         <div class="dc"><canvas id="c-socket"></canvas><div class="center" id="ctr-socket"></div></div>
         <div class="legend" id="lg-socket"></div>
       </div>
     </section>
     <section class="card s6">
-      <h2>03  OWNERSHIP DISTRIBUTION</h2>
+      <div class="chead"><h2>03  OWNERSHIP DISTRIBUTION</h2><div class="seg" id="seg-owner" role="group" aria-label="Ukuran"><button type="button" data-v="tx" class="on">Transaksi</button><button type="button" data-v="kwh">kWh</button></div></div>
       <div class="donut">
         <div class="dc"><canvas id="c-owner"></canvas><div class="center" id="ctr-owner"></div></div>
         <div class="legend" id="lg-owner"></div>
       </div>
     </section>
     <section class="card s6">
-      <h2>04  TOP 5 CHARGING LOCATIONS</h2>
+      <div class="chead"><h2>04  TOP 5 CHARGING LOCATIONS</h2><div class="seg" id="seg-top" role="group" aria-label="Ukuran"><button type="button" data-v="tx" class="on">Transaksi</button><button type="button" data-v="kwh">kWh</button></div></div>
       <div class="chart"><canvas id="c-top"></canvas></div>
     </section>
     <section class="card s12">
@@ -212,7 +214,7 @@ var MON=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'
 var DOW=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 var DOW_ORDER=[1,2,3,4,5,6,0];
 var PAL=['#0f56a0','#1f6fb5','#3a8bc4','#5aa2d2','#82b8dc','#12b0a8','#8fd3cf','#b6c3d1'];
-var ALL=[], META={file:'',total:0}, charts={}, state={metric:'tx',view:'hour'};
+var ALL=[], META={file:'',total:0}, charts={}, state={metric:'tx',view:'hour',sock:'tx',owner:'tx',top:'tx'};
 
 function $(id){return document.getElementById(id)}
 function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
@@ -290,7 +292,8 @@ Chart.register({id:'valueLabels',afterDatasetsDraw:function(ch,a,o){
   if(!o||!o.on)return;var ctx=ch.ctx;ctx.save();ctx.fillStyle=css('--fg');ctx.font='11px system-ui,sans-serif';ctx.textBaseline='middle';
   ch.getDatasetMeta(0).data.forEach(function(b,i){ctx.fillText(fmtInt(ch.data.datasets[0].data[i]),b.x+6,b.y)});ctx.restore();}});
 function axisCommon(){return {ticks:{color:css('--muted')},grid:{color:css('--grid')},border:{color:css('--line')}}}
-function group(rows,key){var m={};rows.forEach(function(r){var k=key(r);m[k]=(m[k]||0)+1});return Object.keys(m).map(function(k){return [k,m[k]]}).sort(function(a,b){return b[1]-a[1]})}
+function wt(m){return m==='kwh'?function(r){return r.kwh}:null}
+function group(rows,key,w){var m={};rows.forEach(function(r){var k=key(r);m[k]=(m[k]||0)+(w?w(r):1)});return Object.keys(m).map(function(k){return [k,m[k]]}).sort(function(a,b){return b[1]-a[1]})}
 
 function renderKpi(rows){
   var kwh=0,fee=0;rows.forEach(function(r){kwh+=r.kwh;fee+=r.fee});
@@ -310,25 +313,34 @@ function renderMonth(rows){
       y:Object.assign({},axisCommon(),{beginAtZero:true,title:{display:true,text:'Energi (MWh)',color:css('--blue')}}),
       y1:Object.assign({},axisCommon(),{beginAtZero:true,position:'right',grid:{display:false},title:{display:true,text:'Total fees (Rp juta)',color:css('--teal')}})}}});
 }
-function renderDonut(id,lgId,ctrId,list,ctrHtml){
+function renderDonut(id,lgId,ctrId,list,ctrHtml,u){
   var tot=list.reduce(function(s,x){return s+x[1]},0);
   mk(id,{type:'doughnut',data:{labels:list.map(function(x){return x[0]}),datasets:[{data:list.map(function(x){return x[1]}),backgroundColor:list.map(function(x,i){return PAL[i%PAL.length]}),borderColor:css('--panel'),borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'66%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return ' '+c.label+': '+fmtInt(c.parsed)+' ('+(c.parsed/tot*100).toFixed(1).replace('.',',')+'%)'}}}}}});
+    options:{responsive:true,maintainAspectRatio:false,cutout:'66%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return ' '+c.label+': '+fmtInt(c.parsed)+u+' ('+(c.parsed/tot*100).toFixed(1).replace('.',',')+'%)'}}}}}});
   $(ctrId).innerHTML=ctrHtml;
   var lg=$(lgId);lg.innerHTML='';
   list.forEach(function(x,i){
     var d=document.createElement('div'),b=document.createElement('i'),t=document.createElement('span'),n=document.createElement('span');
-    b.style.background=PAL[i%PAL.length];t.className='t';t.textContent=x[0];n.className='n';n.textContent=fmtInt(x[1])+' ('+(x[1]/tot*100).toFixed(1).replace('.',',')+'%)';
+    b.style.background=PAL[i%PAL.length];t.className='t';t.textContent=x[0];n.className='n';n.textContent=fmtInt(x[1])+u+' ('+(x[1]/tot*100).toFixed(1).replace('.',',')+'%)';
     d.appendChild(b);d.appendChild(t);d.appendChild(n);lg.appendChild(d);
   });
 }
+function sumList(g){return g.reduce(function(s,x){return s+x[1]},0)}
+function renderSocket(rows){
+  var m=state.sock,g=group(rows,function(r){return r.socket},wt(m)),tot=sumList(g);
+  renderDonut('c-socket','lg-socket','ctr-socket',g,m==='kwh'?fmt1(tot/1000)+'<small>MWh</small>':fmtInt(tot)+'<small>transaksi</small>',m==='kwh'?' kWh':'');
+}
+function renderOwner(rows){
+  var m=state.owner,g=group(rows,function(r){return r.owner},wt(m));
+  renderDonut('c-owner','lg-owner','ctr-owner',g,fmtInt(g.length)+'<small>owners</small>',m==='kwh'?' kWh':'');
+}
 function renderTop(rows){
-  var g=group(rows,function(r){return r.spklu}), top=g.slice(0,5), rest=g.slice(5).reduce(function(s,x){return s+x[1]},0);
-  var labels=top.map(function(x){return x[0]}), data=top.map(function(x){return x[1]}), cols=top.map(function(){return css('--blue')});
-  if(rest>0){labels.push('Others');data.push(rest);cols.push(css('--gray'))}
+  var m=state.top,g=group(rows,function(r){return r.spklu},wt(m)), top=g.slice(0,5), rest=g.slice(5).reduce(function(s,x){return s+x[1]},0);
+  var labels=top.map(function(x){return x[0]}), data=top.map(function(x){return Math.round(x[1])}), cols=top.map(function(){return css('--blue')});
+  if(rest>0){labels.push('Others');data.push(Math.round(rest));cols.push(css('--gray'))}
   mk('c-top',{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:cols,borderRadius:2}]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},valueLabels:{on:true}},
-      scales:{x:Object.assign({},axisCommon(),{beginAtZero:true,grace:'14%'}),y:Object.assign({},axisCommon(),{grid:{display:false},ticks:{color:css('--fg'),font:{size:11}}})}}});
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},valueLabels:{on:true},tooltip:{callbacks:{label:function(c){return ' '+fmtInt(c.parsed.x)+(m==='kwh'?' kWh':' transaksi')}}}},
+      scales:{x:Object.assign({},axisCommon(),{beginAtZero:true,grace:'14%',title:{display:true,text:m==='kwh'?'Energi (kWh)':'Jumlah transaksi',color:css('--muted')}}),y:Object.assign({},axisCommon(),{grid:{display:false},ticks:{color:css('--fg'),font:{size:11}}})}}});
 }
 
 /* busy hours */
@@ -374,12 +386,8 @@ function renderAll(){
   var ms=rows.map(function(r){return r.tx.slice(0,7)}).sort();
   $('subtitle').textContent='Transaction Performance Overview  |  '+monthLabel(ms[0],true)+' – '+monthLabel(ms[ms.length-1],true);
   renderKpi(rows);renderMonth(rows);
-  var sk=group(rows,function(r){return r.socket});
-  renderDonut('c-socket','lg-socket','ctr-socket',sk,fmtInt(rows.length));
-  var ow=group(rows,function(r){return r.owner});
-  renderDonut('c-owner','lg-owner','ctr-owner',ow,fmtInt(ow.length)+'<small>owners</small>');
-  renderTop(rows);renderBusy(rows);applyView();
-  $('foot').textContent='Sumber: '+META.file+'  |  Hanya transaksi berstatus complete ('+fmtInt(ALL.length)+' dari '+fmtInt(META.total)+' baris)  |  Bulan per tanggal transaksi, jam sibuk per jam mulai charging  |  Lokasi diurutkan menurut jumlah transaksi';
+  renderSocket(rows);renderOwner(rows);renderTop(rows);renderBusy(rows);applyView();
+  $('foot').textContent='Sumber: '+META.file+'  |  Hanya transaksi berstatus complete ('+fmtInt(ALL.length)+' dari '+fmtInt(META.total)+' baris)  |  Bulan per tanggal transaksi, jam sibuk per jam mulai charging  |  Panel 02–04 bisa dilihat menurut transaksi atau kWh';
 }
 
 /* ---------- messages & upload ---------- */
@@ -421,6 +429,9 @@ function seg(id,key,cb){
 }
 seg('seg-metric','metric',function(){renderBusy(filtered())});
 seg('seg-view','view',applyView);
+seg('seg-sock','sock',function(){renderSocket(filtered())});
+seg('seg-owner','owner',function(){renderOwner(filtered())});
+seg('seg-top','top',function(){renderTop(filtered())});
 ['dragenter','dragover'].forEach(function(t){window.addEventListener(t,function(e){e.preventDefault();document.body.classList.add('drag')})});
 ['dragleave','drop'].forEach(function(t){window.addEventListener(t,function(e){e.preventDefault();document.body.classList.remove('drag')})});
 window.addEventListener('drop',function(e){var f=e.dataTransfer&&e.dataTransfer.files[0];if(f)loadFile(f)});
